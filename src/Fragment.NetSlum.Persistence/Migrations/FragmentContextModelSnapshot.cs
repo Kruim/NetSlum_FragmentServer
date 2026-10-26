@@ -17,10 +17,64 @@ namespace Fragment.NetSlum.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.19")
+                .HasAnnotation("ProductVersion", "9.0.16")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
+
+            modelBuilder.Entity("Fragment.NetSlum.Persistence.Entities.AreaServerAssociation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("AuthUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("auth_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("LastKnownName")
+                        .IsRequired()
+                        .HasMaxLength(21)
+                        .HasColumnType("varchar(21)")
+                        .HasColumnName("last_known_name");
+
+                    b.Property<string>("LocalIpAddress")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("varchar(15)")
+                        .HasColumnName("local_ip_address");
+
+                    b.Property<string>("PublicIpAddress")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("varchar(15)")
+                        .HasColumnName("public_ip_address");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_area_server_associations");
+
+                    b.HasIndex("AuthUserId")
+                        .HasDatabaseName("ix_area_server_associations_auth_user_id");
+
+                    b.HasIndex("LocalIpAddress")
+                        .HasDatabaseName("ix_area_server_associations_local_ip_address");
+
+                    b.HasIndex("PublicIpAddress")
+                        .HasDatabaseName("ix_area_server_associations_public_ip_address");
+
+                    b.ToTable("area_server_associations", (string)null);
+                });
 
             modelBuilder.Entity("Fragment.NetSlum.Persistence.Entities.AreaServerCategory", b =>
                 {
@@ -493,6 +547,10 @@ namespace Fragment.NetSlum.Persistence.Migrations
                     b.Property<int>("CurrentHp")
                         .HasColumnType("int")
                         .HasColumnName("current_hp");
+
+                    b.Property<int>("CurrentLevel")
+                        .HasColumnType("int")
+                        .HasColumnName("current_level");
 
                     b.Property<int>("CurrentSp")
                         .HasColumnType("int")
@@ -1107,6 +1165,18 @@ namespace Fragment.NetSlum.Persistence.Migrations
                         .HasDatabaseName("ix_web_news_read_logs_web_news_article_id");
 
                     b.ToTable("web_news_read_logs", (string)null);
+                });
+
+            modelBuilder.Entity("Fragment.NetSlum.Persistence.Entities.AreaServerAssociation", b =>
+                {
+                    b.HasOne("Fragment.NetSlum.Persistence.Entities.AuthUser", "AuthUser")
+                        .WithMany()
+                        .HasForeignKey("AuthUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_area_server_associations_auth_users_auth_user_id");
+
+                    b.Navigation("AuthUser");
                 });
 
             modelBuilder.Entity("Fragment.NetSlum.Persistence.Entities.AuthRole", b =>

@@ -8,18 +8,24 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using FastEndpoints;
 using FastEndpoints.Swagger;
+using FastEndpoints.Security;
 using Fragment.NetSlum.Core.CommandBus;
+using Fragment.NetSlum.Networking.Contexts;
 using Fragment.NetSlum.Networking.Extensions;
+using Fragment.NetSlum.Networking.Services.Notifications;
+using Fragment.NetSlum.Networking.Services.Notifications.Providers;
+using Fragment.NetSlum.Networking.Services.Notifications.Providers.Discord;
 using Fragment.NetSlum.Networking.Stores;
 using Fragment.NetSlum.Persistence;
 using Fragment.NetSlum.Persistence.Extensions;
 using Fragment.NetSlum.Persistence.Interceptors;
 using Fragment.NetSlum.Persistence.Listeners;
-using Fragment.NetSlum.Server.Authentication;
+using Fragment.NetSlum.Server.Api.Middleware;
 using Fragment.NetSlum.Server.Authentication.Configuration;
 using Fragment.NetSlum.Server.Converters;
 using Fragment.NetSlum.Server.Servers;
 using Fragment.NetSlum.Server.Services;
+using Fragment.NetSlum.Server.Stores;
 using Fragment.NetSlum.Server.Transformers;
 using Fragment.NetSlum.TcpServer;
 using HealthChecks.UI.Client;
@@ -33,8 +39,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
 using ZiggyCreatures.Caching.Fusion;
@@ -89,7 +93,7 @@ builder.Services.AddFastEndpoints()
     .SwaggerDocument(o =>
     {
         o.ShortSchemaNames = true;
-        o.EnableJWTBearerAuth = false;
+        o.EnableJWTBearerAuth = true;
         o.MaxEndpointVersion = 1;
         o.DocumentSettings = d =>
         {
@@ -98,6 +102,10 @@ builder.Services.AddFastEndpoints()
             d.Description = "REST API that provides information from the .hack//Fragment server";
         };
     });
+
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+
 builder.Services
     .Configure<JsonSerializerOptions>(opt =>
     {
@@ -136,42 +144,31 @@ builder.Services.AddFusionCache()
 
 builder.Services.Configure<DiscordAuthOptions>(builder.Configuration.GetSection("Authentication"));
 
-builder.Services.AddAuthentication()
-    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme);
+builder.Services.AddSingleton<AreaServerAssociationStore>();
 
-builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-    .Configure<IOptions<DiscordAuthOptions>>((options, discordOptions) =>
+builder.Services.AddAuthenticationJwtBearer(s =>
+{
+    s.SigningKey = builder.Configuration.GetSection("Authentication")["JwtSecret"];
+    s.SigningStyle = TokenSigningStyle.Symmetric;
+}, options =>
+{
+    options.Events = new JwtBearerEvents
     {
-        options.TokenHandlers.Clear();
-        options.TokenHandlers.Add(new DiscordJwtTokenHandler(discordOptions));
-
-        options.Events = new JwtBearerEvents
+        // Allow the JWT policy to accept the token from either the Authorization header, or the 'token' cookie
+        // supplied in the request
+        OnMessageReceived = context =>
         {
-            // Allow the JWT policy to accept the token from either the Authorization header, or the 'token' cookie
-            // supplied in the request
-            OnMessageReceived = context =>
-            {
-                context.Token = context.HttpContext.Request.Headers.TryGetValue("Authorization", out var bearerToken)
-                    ? AuthenticationHeaderValue.Parse(bearerToken.ToString()).Parameter
-                    : context.HttpContext.Request.Cookies["netslum-token"];
+            context.Token = context.HttpContext.Request.Headers.TryGetValue("Authorization", out var bearerToken)
+                ? AuthenticationHeaderValue.Parse(bearerToken.ToString()).Parameter
+                : context.HttpContext.Request.Cookies["netslum-token"];
 
-                return Task.CompletedTask;
-            },
-        };
+            return Task.CompletedTask;
+        },
+    };
 
-        options.MapInboundClaims = true;
-        options.IncludeErrorDetails = true;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            RequireSignedTokens = true,
-            ValidateAudience = false,
-            ValidateIssuer = false,
-            ValidateIssuerSigningKey = true,
-            IncludeTokenOnFailedValidation = true,
-            ValidateLifetime = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(discordOptions.Value.JwtSecret)),
-        };
-    });
+    options.MapInboundClaims = true;
+    options.IncludeErrorDetails = true;
+});
 
 builder.Services.AddTransient<IClaimsTransformation, WebUserClaimsTransformer>();
 
@@ -190,6 +187,12 @@ builder.Services.AddSingleton(typeof(ChatLobbyStore));
 builder.Services.AddHostedService<ServerBackgroundService>();
 builder.Services.AddHostedService<ClientTickService>();
 builder.Services.AddHostedService<ChatLobbyBackgroundService>();
+builder.Services.AddScoped<GuildShopContextAccessor>();
+
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
+
+builder.Services.AddKeyedScoped<INotificationProvider, DiscordNotificationProvider>(nameof(DiscordNotificationProvider).Replace("NotificationProvider", string.Empty, StringComparison.InvariantCultureIgnoreCase));
+builder.Services.AddSingleton<NotificationService>();
 
 
 var app = builder.Build();

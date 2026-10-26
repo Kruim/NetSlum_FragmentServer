@@ -6,7 +6,6 @@ using Fragment.NetSlum.Core.Constants;
 using Fragment.NetSlum.Persistence;
 using Fragment.NetSlum.Server.Api.Models;
 using Fragment.NetSlum.Server.Api.ViewModels;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace Fragment.NetSlum.Server.Api.Endpoints.News;
 
@@ -22,7 +21,6 @@ public class UpdateMotdEndpoint : Endpoint<UpdateMotdRequest, MessageOfTheDay>
     public override void Configure()
     {
         Patch("/motd");
-        AuthSchemes(JwtBearerDefaults.AuthenticationScheme);
         Permissions(nameof(AuthUserPermissions.ManageNews));
         Summary(s =>
         {
